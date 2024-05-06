@@ -21,11 +21,13 @@ Class Discord {
         , GUILD_SCHEDULED_EVENTS: 1 << 16
         , ALL: 1 << 17 - 1
     }
-    __New(token, indents := [Discord.indents.GUILDS, Discord.indents.GUILD_MESSAGES, Discord.indents.MESSAGE_CONTENT]) {
+    __New(token, indents := Discord.indents.ALL) {
         this.token := token
         this.indents := 0
-        for i in indents
-            this.indents += i
+        if indents is Array
+            for i, v in indents
+                this.indents |= v
+        else this.indents := indents
         this.ws := Discord.WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
             message: (self, data) => this.OnMSG(data),
         })
@@ -41,6 +43,10 @@ Class Discord {
                 }
             }
         }))
+        
+    }
+    fetchCommands() {
+        return this.Request("GET", "/applications/" this.user.id "/commands", "", Map("User-Agent", "DiscordAHK by ninju"))
     }
     OnMSG(data) {
         data := Discord.JSON.parse(data,,false)
@@ -50,28 +56,34 @@ Class Discord {
                     case "READY":
                         this.sessionId := data.d.session_id
                         this.user := data.d.user
+                        this.commandArray := Discord.JSON.parse(this.fetchCommands())
                         this.emit("ready")
                     case "MESSAGE_CREATE":
                         data.d.reply := (self,content,*) => this.sendMessage(data.d.channel_id, content, data.d.id)
                         this.emit("message", data.d)
                     case "INTERACTION_CREATE":
-                        this.emit("interaction", Discord.Interaction(data.d))
+                        this.emit("interaction", Discord.Interaction(this,data.d))
+                        /* this.ws.sendText(Discord.JSON.stringify({
+                            op: 1,
+                            d: data.d.heartbeat_interval
+                        })) */
                     default:
                         this.emit(data.t, data.d)
                 }
-            case 1:
-                this.ws.sendText(Discord.JSON.stringify({
-                    op: 1,
-                    d: data.s
-                }))
             case 7,9:
                 this.ws.reconnect()
+            case 10:
+                static init := (SetTimer((*) => this.ws.sendText(Discord.JSON.stringify({
+                    op: 1,
+                    d: this.sessionId
+                })), data.d.heartbeat_interval))
         }
     }
     emit(event, args*) => this.HasProp("On" event) ? this.On%event%.call(args*) : ""
     On(event, func) => this.On%event% := func
     Request(method := "GET", edpoint := "", data := "", headers := Map()) {
         h := ComObject("WinHttp.WinHttpRequest.5.1")
+        h.Option[9] := 0x800
         h.Open(method, Discord.baseApi edpoint, true)
         h.SetRequestHeader("Authorization", "Bot " this.token)
         for k, v in headers
@@ -87,24 +99,25 @@ Class Discord {
         }), Map("User-Agent", "DiscordAHK by ninju", "Content-Type", "application/json"))
     }
     class Interaction {
-        __New(data) {
+        __New(self, data) {
+            this.bot := self
             this.id := data.id
             this.token := data.token
-            this.data := data.data
+            this.data := data
             this.member := data.member
             this.guild_id := data.guild_id
             this.channel_id := data.channel_id
             this.application_id := data.application_id
             this.type := data.type
             this.user := data.member.user
+            A_Clipboard := Discord.JSON.stringify(this.data)
         }
         reply(content) {
-            return this.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify({
-                type: 4,
-                data: {
-                    content: content
-                }
-            }), Map("User-Agent", "DiscordAHK by ninju", "Content-Type", "application/json"))
+            return this.interactionReply := this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju", "Content-Type", "application/json"))
+        }
+        react(emoji) {
+            msgbox this.interactionReply
+            return this.bot.Request("PUT", "/channels/" this.data.channel.id "/messages/" this.data.channel.last_message_id "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju"))
         }
     }
     /************************************************************************
