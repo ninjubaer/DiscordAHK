@@ -1,0 +1,9 @@
+#config
+settings
+#IDE
+.vscode
+*__includes.ahk
+#temp and testing files
+*.temp.*
+*.test.*
+test/
