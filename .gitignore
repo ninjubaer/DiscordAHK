@@ -2,7 +2,7 @@
 settings
 #IDE
 .vscode
-*__includes.ahk
+*__includeCommands.ahk
 #temp and testing files
 *.temp.*
 *.test.*

@@ -42,6 +42,7 @@ Class Discord {
         else this.intents := intents
         this.ws := Discord.WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
             message: (self, data) => this.OnMSG(data),
+            close: (self, status, reason) => this.disconnect.bind(this)
         })
         this.ws.sendText(Discord.JSON.stringify({
             op: 2,
@@ -65,6 +66,10 @@ Class Discord {
             }
         }))
         
+    }
+    static now() {
+        time:=A_Now
+        return SubStr(time, 1, 4) "-" SubStr(time, 5, 2) "-" SubStr(time, 7, 2) "T" SubStr(time, 9, 2) ":" SubStr(time, 11, 2) ":" SubStr(time, 13, 2) ".000Z"
     }
     setPresence(content) {
         static activityTypes := Map("playing", 0, "streaming", 1, "listening", 2, "watching", 3, "custom", 4, "competing", 5)
@@ -130,6 +135,10 @@ Class Discord {
             continue
         func.call()
     }
+    OnDisconnect(self, status, reason) {
+        try SetTimer(this.sendHeartBeat, 0)
+        this.emit("Close", status, reason)
+    }
     On(event, func) => this.On%event% := func
     /**
      * Request(method, edpoint, data, headers)
@@ -172,6 +181,7 @@ Class Discord {
     }
     class Interaction {
         __New(self, data) {
+            DllCall("GetSystemTimeAsFileTime", "Int64*", &fileTime:=0),this.createdAt := fileTime 
             this.bot := self
             this.id := data.id
             this.token := data.token
@@ -192,6 +202,16 @@ Class Discord {
                 if this.data.data.name = v["name"]
                     return true
             return false
+        }
+        editReply(content) {
+            whr := ComObject("WinHttp.WinHttpRequest.5.1")
+            whr.Open("PATCH", Discord.baseApi "/webhooks/" this.bot.user.id "/" this.token "/messages/@original", true)
+            whr.SetRequestHeader("Authorization", "Bot " this.bot.token)
+            whr.SetRequestHeader("User-Agent", "DiscordAHK by ninju and ferox")
+            whr.SetRequestHeader("Content-Type", "application/json")
+            whr.Send(Discord.JSON.stringify(content))
+            whr.WaitForResponse()
+            return whr.ResponseText
         }
     }
     /************************************************************************

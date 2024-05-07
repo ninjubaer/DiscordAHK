@@ -1,0 +1,1 @@
+IsSetV(&v:=unset) => isSet(v) ? v : ""

@@ -4,6 +4,7 @@ Persistent
 
 #Include lib\DiscordAHK\
 #Include Discord.ahk
+#include Builders\
 #include SlashCommandBuilder.ahk
 #Include EmbedBuilder.ahk
 client := Discord(IniRead("settings/config.ini","Discord","BotToken")) ;, [Discord.intents.GUILDS, Discord.intents.GUILD_MESSAGES, Discord.intents.MESSAGE_CONTENT])
