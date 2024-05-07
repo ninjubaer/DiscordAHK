@@ -5,6 +5,7 @@ Persistent
 #Include lib\DiscordAHK\
 #Include Discord.ahk
 #include SlashCommandBuilder.ahk
+#Include EmbedBuilder.ahk
 client := Discord(IniRead("settings/config.ini","Discord","BotToken")) ;, [Discord.intents.GUILDS, Discord.intents.GUILD_MESSAGES, Discord.intents.MESSAGE_CONTENT])
 client.Once("ready", () => (ToolTip("ready"), Sleep(1000), ToolTip()))
 client.On("interaction_create", interactionHandler)
@@ -60,11 +61,13 @@ ninjuCommand(interaction) {
     })
 }
 blep2Command(interaction) {
+    embed := EmbedBuilder()
+    .setTitle("**BLEP2**")
+    .setTimeStamp()
     interaction.reply({
         type: 4,
         data: {
-            content: "blep2!",
-            flags: Discord.flags.EPHEMERAL
+            embeds: [embed.embedObj]
         }
     })
 }
