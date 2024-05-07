@@ -1,7 +1,7 @@
 #DllLoad winhttp.dll
 Class Discord {
     static baseApi := "https://discord.com/api/v10"
-    , indents := {
+    , intents := {
         GUILDS: 1 << 0
         , GUILD_MEMBERS: 1 << 1
         , GUILD_BANS: 1 << 2
@@ -19,15 +19,27 @@ Class Discord {
         , DIRECT_MESSAGE_TYPING: 1 << 14
         , MESSAGE_CONTENT: 1 << 15
         , GUILD_SCHEDULED_EVENTS: 1 << 16
-        , ALL: 1 << 17 - 1
+    },
+    flags := {
+        crossposted: 1 << 0,
+        is_crosspost: 1 << 1,
+        suppress_embeds: 1 << 2,
+        source_message_deleted: 1 << 3,
+        urgent: 1 << 4,
+        has_thread: 1 << 5,
+        ephemeral: 1 << 6,
+        loading: 1 << 7,
+        FAILED_TO_MENTION_SOME_ROLES_IN_THREAD: 1 << 8
     }
-    __New(token, indents := Discord.indents.ALL) {
+    __New(token, intents := [Discord.intents.GUILDS, Discord.intents.GUILD_MESSAGES, Discord.intents.GUILD_MESSAGE_REACTIONS, Discord.intents.GUILD_MESSAGE_TYPING, Discord.intents.MESSAGE_CONTENT]) {
+        this.ready := false
         this.token := token
-        this.indents := 0
-        if indents is Array
-            for i, v in indents
-                this.indents |= v
-        else this.indents := indents
+        this.intents := 0
+        this.commandCallback := {}
+        if intents is Array
+            for i, v in intents
+                this.intents |= v
+        else this.intents := intents
         this.ws := Discord.WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
             message: (self, data) => this.OnMSG(data),
         })
@@ -35,24 +47,54 @@ Class Discord {
             op: 2,
             d: {
                 token: token,
-                intents: this.indents,
+                intents: this.intents,
                 properties: {
                     os: "windows",
                     browser: "ahk",
                     device: "ahk"
+                },
+                presence: {
+                    since: 0,
+                    activities: [{
+                        name: "DiscordAHK",
+                        type: 0
+                    }],
+                    status: "online",
+                    afk: false
                 }
             }
         }))
         
     }
+    setPresence(content) {
+        static activityTypes := Map("playing", 0, "streaming", 1, "listening", 2, "watching", 3, "custom", 4, "competing", 5)
+        if !content.HasProp("name") || !content.HasProp("type")
+            throw Error("Invalid presence content")
+        if content.type is String {
+            content.type := StrLower(content.type)
+            if !activityTypes.Has(content.type)
+                throw Error("Invalid activity type")
+            content.type := activityTypes[content.type]
+        }
+        this.ws.sendText(Discord.JSON.stringify({
+            op: 3,
+            d: {
+                since: 0,
+                activities: [{ name: content.name, type: content.type }],
+                status: "online",
+                afk: false
+            }
+        }))
+    }
     fetchCommands() {
-        return this.Request("GET", "/applications/" this.user.id "/commands", "", Map("User-Agent", "DiscordAHK by ninju"))
+        return this.Request("GET", "/applications/" this.user.id "/commands", "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
     }
     OnMSG(data) {
         data := Discord.JSON.parse(data,,false)
         switch data.op {
             case 0:
-                switch data.t {
+                this.Once%data.t% := true
+                switch data.t,0 {
                     case "READY":
                         this.sessionId := data.d.session_id
                         this.user := data.d.user
@@ -60,27 +102,43 @@ Class Discord {
                         this.emit("ready")
                     case "MESSAGE_CREATE":
                         data.d.reply := (self,content,*) => this.sendMessage(data.d.channel_id, content, data.d.id)
-                        this.emit("message", data.d)
-                    case "INTERACTION_CREATE":
-                        this.emit("interaction", Discord.Interaction(this,data.d))
-                        /* this.ws.sendText(Discord.JSON.stringify({
-                            op: 1,
-                            d: data.d.heartbeat_interval
-                        })) */
+                        data.d.isBot := data.d.author.HasProp("bot") && data.d.author.bot ? true : false, data.d.isWebhook := data.d.author.HasProp("webhook_id") ? true : false
+                        this.emit("message_create", data.d)
+                    case "interaction_create":
+                        this.emit("interaction_create", Discord.Interaction(this,data.d))
                     default:
                         this.emit(data.t, data.d)
                 }
             case 7,9:
                 this.ws.reconnect()
             case 10:
-                static init := (SetTimer((*) => this.ws.sendText(Discord.JSON.stringify({
-                    op: 1,
-                    d: this.sessionId
-                })), data.d.heartbeat_interval))
+                try SetTimer(this.sendHeartBeat, 0)
+                SetTimer(this.sendHeartBeat.Bind(this), data.d.heartbeat_interval)
         }
     }
+    sendHeartBeat(*) {
+        this.ws.sendText(Discord.JSON.stringify({
+            op: 1,
+            d: this.sessionId
+        }))
+    }
     emit(event, args*) => this.HasProp("On" event) ? this.On%event%.call(args*) : ""
+    Once(event, func) {
+        if event != "ready"
+            this.Once%event% := false
+        while !this.HasProp("Once" event or !this.Once%event%)
+            continue
+        func.call()
+    }
     On(event, func) => this.On%event% := func
+    /**
+     * Request(method, edpoint, data, headers)
+     * authorization already included
+     * @param {String} method 
+     * @param {String} edpoint 
+     * @param {String} data 
+     * @param {Map} headers 
+     */
     Request(method := "GET", edpoint := "", data := "", headers := Map()) {
         h := ComObject("WinHttp.WinHttpRequest.5.1")
         h.Option[9] := 0x800
@@ -92,11 +150,25 @@ Class Discord {
         h.WaitForResponse()
         return h.ResponseText
     }
-    sendMessage(channel, content, replyid?) {
+    sendContent(channel, content, replyid?) {
         return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify({
             content: content,
             message_reference: IsSet(replyid) ? { message_id: replyid } : ""
-        }), Map("User-Agent", "DiscordAHK by ninju", "Content-Type", "application/json"))
+        }), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+    }
+    sendMessage(channel, data, replyId?) {
+        if IsSet(replyId)
+            data.message_reference := { message_id: replyId }
+        return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify(data), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+    }
+    react(channel, message, emoji) {
+        return this.Request("PUT", "/channels/" channel "/messages/" message "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
+    }
+    deleteMessage(channel, message) {
+        return this.Request("DELETE", "/channels/" channel "/messages/" message, "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
+    }
+    editMessage(channel, message, content) {
+        return this.Request("PATCH", "/channels/" channel "/messages/" message, Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
     }
     class Interaction {
         __New(self, data) {
@@ -113,11 +185,13 @@ Class Discord {
             A_Clipboard := Discord.JSON.stringify(this.data)
         }
         reply(content) {
-            return this.interactionReply := this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju", "Content-Type", "application/json"))
+            return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
         }
-        react(emoji) {
-            msgbox this.interactionReply
-            return this.bot.Request("PUT", "/channels/" this.data.channel.id "/messages/" this.data.channel.last_message_id "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju"))
+        isCommand() {
+            for k,v in this.bot.commandArray
+                if this.data.data.name = v["name"]
+                    return true
+            return false
         }
     }
     /************************************************************************
@@ -537,7 +611,7 @@ Class Discord {
          * @param expandlevel The level of JSON string need to expand, by default expand all.
          * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
          */
-        static stringify(obj, expandlevel := unset, space := "  ") {
+        static stringify(obj, expandlevel := false, space := "  ") {
             expandlevel := IsSet(expandlevel) ? Abs(expandlevel) : 10000000
             return Trim(CO(obj, expandlevel))
             CO(O, J := 0, R := 0, Q := 0) {
