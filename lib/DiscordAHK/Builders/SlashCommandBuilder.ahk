@@ -17,11 +17,32 @@ Class SlashCommandBuilder {
         this.commandObject.description := description
         return this
     }
-    addOption() {
+    addStringOption() {
         if !this.commandObject.hasProp('options')
             this.commandObject.options := [{type:3}]
         else
             this.commandObject.options.push({type:3})
+        return SlashCommandBuilder.Option(this,this.commandObject.options[this.commandObject.options.length])
+    }
+    addIntegerOption() {
+        if !this.commandObject.hasProp('options')
+            this.commandObject.options := [{type:4}]
+        else
+            this.commandObject.options.push({type:4})
+        return SlashCommandBuilder.Option(this,this.commandObject.options[this.commandObject.options.length])
+    }
+    addBooleanOption() {
+        if !this.commandObject.hasProp('options')
+            this.commandObject.options := [{type:5}]
+        else
+            this.commandObject.options.push({type:5})
+        return SlashCommandBuilder.Option(this,this.commandObject.options[this.commandObject.options.length])
+    }
+    addUserOption() {
+        if !this.commandObject.hasProp('options')
+            this.commandObject.options := [{type:6}]
+        else
+            this.commandObject.options.push({type:6})
         return SlashCommandBuilder.Option(this,this.commandObject.options[this.commandObject.options.length])
     }
     Class Option {
@@ -43,7 +64,7 @@ Class SlashCommandBuilder {
             return this
         }
         setRequired(required) {
-            this.option.required := Discord.JSON.%required%
+            this.option.required := Discord.JSON.%(required ? "true": "false")%
             return this
         }
         addChoice(name, value) {
@@ -86,8 +107,8 @@ Class SlashCommandBuilder {
         if !this.commandObject.hasProp('name') || !this.commandObject.hasProp('description')
             throw Error('Command needs a name and description to be created.')
         if this.HasProp('guildID') && this.guildID
-            return this.bot.request('POST', '/applications/' client.user.id '/guilds/' this.guildID '/commands', Discord.JSON.stringify(this.commandObject), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
-        this.bot.request('POST', '/applications/' client.user.id '/commands', Discord.JSON.stringify(this.commandObject), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+            return this.bot.request('POST', '/applications/' this.bot.user.id '/guilds/' this.guildID '/commands', Discord.JSON.stringify(this.commandObject), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+        this.bot.request('POST', '/applications/' this.bot.user.id '/commands', Discord.JSON.stringify(this.commandObject), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
         this.bot.commandArray := Discord.JSON.parse(this.bot.fetchCommands())
     }
 }

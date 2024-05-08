@@ -1,13 +1,6 @@
-includeCommands() {
-    #Include %A_ScriptDir%\functions\isSetV.ahk
-    loop files ".\commands\*.ahk", "R"
-        if A_LoopFileName != "__includeCommands.ahk"
-            includes .= "#Include " A_LoopFileFullPath "`r`n"
-    (f:=FileOpen(".\commands\__includeCommands.ahk", "w")).Write(IsSetV(&includes)), f.Close()
-}
-
 interactionHandler(interaction,*) {
-    if !interaction.isCommand()
+    if !interaction.isCommand() {
+        client.request("DELETE", "/applications/" interaction.data.application_id "/commands/" interaction.data.data.id,, Map("User-Agent", "DiscordAHK by ninju and ferox"))
         return interaction.reply({
             type: 4,
             data: {
@@ -15,11 +8,10 @@ interactionHandler(interaction,*) {
                 flags: Discord.flags.EPHEMERAL
             }
         })
-    ;timestamp:
-    A_Clipboard := Discord.JSON.stringify(interaction.data)
+    }
     if client.commandCallback.HasProp(interaction.data.data.name)
         (client.commandCallback.%interaction.data.data.name%)(interaction)
-    else
+    else {
         interaction.reply({
             type: 4,
             data: {
@@ -27,4 +19,6 @@ interactionHandler(interaction,*) {
                 flags: Discord.flags.EPHEMERAL
             }
         })
+        client.request("DELETE", "/applications/" interaction.data.application_id "/commands/" interaction.data.data.id,, Map("User-Agent", "DiscordAHK by ninju and ferox"))
+    }
 }
