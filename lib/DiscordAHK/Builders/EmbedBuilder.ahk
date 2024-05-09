@@ -136,6 +136,10 @@ Class EmbedBuilder {
      * @property {url} url 
      */
     setImage(image) {
+        if image is AttachmentBuilder {
+            this.embedObj.image := {url: image.attachmentName}
+            return this
+        }
         if !IsObject(image)
             throw Error("expected an object", , image)
         if !RegExMatch(image.url, ":\/\/")

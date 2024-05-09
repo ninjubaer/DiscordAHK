@@ -204,17 +204,22 @@ Class Discord {
             A_Clipboard := Discord.JSON.stringify(this.data)
         }
         reply(content) {
-            if content.hasProp("embeds")
-                for i,j in content.embeds.OwnProps()
+            if !content.hasProp("data")
+                content := {type:4,data: content}
+            if content.data.hasProp("embeds")
+                for i,j in content.data.embeds
                     if j is EmbedBuilder
-                        content.embeds[i] := j.embedObj
-            if !content.HasProp("files")
+                        content.data.embeds[i] := j.embedObj
+            if !content.data.HasProp("files")
                return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
-            params := [Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(content))]
-            for i, j in content.files.OwnProps()
+            params := [""]
+            for i, j in content.data.files {
                 if j is AttachmentBuilder {
-                    params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",Discord.MimeType(j.file),(j.isBitmap ? "pBitmap" : "file"),j.file))
+                    content.data.files[i] := {url: j.attachmentName}
+                    params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",j.contentType,(j.isBitmap ? "pBitmap" : "file"),j.file))
                 }
+            }
+            params[1] := Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(content))
             Discord.CreateFormData(&payload, &contentType, params)
             return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", payload, Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", contentType))
         }

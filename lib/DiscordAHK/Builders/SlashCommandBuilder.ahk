@@ -68,6 +68,7 @@ Class SlashCommandBuilder {
             return this
         }
         addChoice(name, value) {
+            value := value = "true" ? Discord.JSON.true : value = "false" ? Discord.JSON.false : value
             if this.option.hasProp('choices')
                 this.option.choices.push({name: name, value: value})
             else

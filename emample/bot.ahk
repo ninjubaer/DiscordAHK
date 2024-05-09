@@ -10,6 +10,7 @@ Persistent
 #Include %A_ScriptDir%\..\lib\Gdip_All.ahk
 #Include %A_ScriptDir%\functions\isSetV.ahk
 ;* if intents are omitted; those intents are used
+;OnError (e,mode) => mode = "Return" ? -1 : 0
 pToken := Gdip_Startup()
 includeCommands() {
     if A_Args.Length
