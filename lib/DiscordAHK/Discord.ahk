@@ -169,15 +169,19 @@ Class Discord {
         if IsSet(replyId)
             data.message_reference := { message_id: replyId }
         if data.hasProp("embeds")
-            for i,j in data.embeds.OwnProps()
+            for i,j in data.embeds
                 if j is EmbedBuilder
                     data.embeds[i] := j.embedObj
         if !data.HasProp("files")
             return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify(data), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
-        for i,j in data.files.OwnProps()
-            if j is AttachmentBuilder
+        params := [""]
+        for i,j in data.files
+            if j is AttachmentBuilder {
                 data.files[i] := {url: j.attachmentName}
-        Discord.CreateFormData(&payload, &contentType, Discord.JSON.stringify(data), data.files*)
+                params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",j.contentType,(j.isBitmap ? "pBitmap" : "file"),j.file))
+            }
+        params[1] := Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(data))
+        Discord.CreateFormData(&payload, &contentType, params)
     }
     react(channel, message, emoji) {
         return this.Request("PUT", "/channels/" channel "/messages/" message "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
