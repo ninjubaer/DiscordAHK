@@ -168,7 +168,16 @@ Class Discord {
     sendMessage(channel, data, replyId?) {
         if IsSet(replyId)
             data.message_reference := { message_id: replyId }
-        return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify(data), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+        if data.hasProp("embeds")
+            for i,j in data.embeds.OwnProps()
+                if j is EmbedBuilder
+                    data.embeds[i] := j.embedObj
+        if !data.HasProp("files")
+            return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify(data), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+        for i,j in data.files.OwnProps()
+            if j is AttachmentBuilder
+                data.files[i] := {url: j.attachmentName}
+        Discord.CreateFormData(&payload, &contentType, Discord.JSON.stringify(data), data.files*)
     }
     react(channel, message, emoji) {
         return this.Request("PUT", "/channels/" channel "/messages/" message "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
@@ -195,7 +204,19 @@ Class Discord {
             A_Clipboard := Discord.JSON.stringify(this.data)
         }
         reply(content) {
-            return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+            if content.hasProp("embeds")
+                for i,j in content.embeds.OwnProps()
+                    if j is EmbedBuilder
+                        content.embeds[i] := j.embedObj
+            if !content.HasProp("files")
+               return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+            params := [Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(content))]
+            for i, j in content.files.OwnProps()
+                if j is AttachmentBuilder {
+                    params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",Discord.MimeType(j.file),(j.isBitmap ? "pBitmap" : "file"),j.file))
+                }
+            Discord.CreateFormData(&payload, &contentType, params)
+            return this.bot.Request("POST", "/interactions/" this.id "/" this.token "/callback", payload, Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", contentType))
         }
         isCommand() {
             for k,v in this.bot.commandArray
@@ -213,6 +234,94 @@ Class Discord {
             whr.WaitForResponse()
             return whr.ResponseText
         }
+    }
+    static CreateFormData(&retData, &contentType, fields)
+	{
+		static chars := "0|1|2|3|4|5|6|7|8|9|a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z"
+
+		chars := Sort(chars, "D| Random")
+		boundary := SubStr(StrReplace(chars, "|"), 1, 12)
+		hData := DllCall("GlobalAlloc", "UInt", 0x2, "UPtr", 0, "Ptr")
+		DllCall("ole32\CreateStreamOnHGlobal", "Ptr", hData, "Int", 0, "PtrP", &pStream:=0, "UInt")
+
+		for field in fields
+		{
+			str :=
+			(
+			'
+
+			------------------------------' boundary '
+			Content-Disposition: form-data; name="' field["name"] '"' (field.Has("filename") ? ('; filename="' field["filename"] '"') : "") '
+			Content-Type: ' field["content-type"] '
+
+			' (field.Has("content") ? (field["content"] "`r`n") : "")
+			)
+
+			utf8 := Buffer(length := StrPut(str, "UTF-8") - 1), StrPut(str, utf8, length, "UTF-8")
+			DllCall("shlwapi\IStream_Write", "Ptr", pStream, "Ptr", utf8.Ptr, "UInt", length, "UInt")
+
+			if field.Has("pBitmap")
+			{
+				try
+				{
+					pFileStream := Gdip_SaveBitmapToStream(field["pBitmap"])
+					DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size:=0, "UInt")
+					DllCall("shlwapi\IStream_Reset", "Ptr", pFileStream, "UInt")
+					DllCall("shlwapi\IStream_Copy", "Ptr", pFileStream, "Ptr", pStream, "UInt", size, "UInt")
+					ObjRelease(pFileStream)
+				}
+			}
+
+			if field.Has("file")
+			{
+				DllCall("shlwapi\SHCreateStreamOnFileEx", "WStr", field["file"], "Int", 0, "UInt", 0x80, "Int", 0, "Ptr", 0, "PtrP", &pFileStream:=0)
+				DllCall("shlwapi\IStream_Size", "Ptr", pFileStream, "UInt64P", &size:=0, "UInt")
+				DllCall("shlwapi\IStream_Copy", "Ptr", pFileStream, "Ptr", pStream, "UInt", size, "UInt")
+				ObjRelease(pFileStream)
+			}
+		}
+
+		str :=
+		(
+		'
+
+		------------------------------' boundary '--
+		'
+		)
+
+		utf8 := Buffer(length := StrPut(str, "UTF-8") - 1), StrPut(str, utf8, length, "UTF-8")
+		DllCall("shlwapi\IStream_Write", "Ptr", pStream, "Ptr", utf8.Ptr, "UInt", length, "UInt")
+		ObjRelease(pStream)
+
+		pData := DllCall("GlobalLock", "Ptr", hData, "Ptr")
+		size := DllCall("GlobalSize", "Ptr", pData, "UPtr")
+
+		retData := ComObjArray(0x11, size)
+		pvData := NumGet(ComObjValue(retData), 8 + A_PtrSize, "Ptr")
+		DllCall("RtlMoveMemory", "Ptr", pvData, "Ptr", pData, "Ptr", size)
+
+		DllCall("GlobalUnlock", "Ptr", hData)
+		DllCall("GlobalFree", "Ptr", hData, "Ptr")
+		contentType := "multipart/form-data; boundary=----------------------------" boundary
+	}
+    static MimeType(path) {
+        n := FileOpen(path, "r").ReadUInt()
+        Return (n = 0x474E5089) ? "image/png"
+        : (n = 0x38464947) ? "image/gif"
+        : (n & 0xFFFF0000 = 0x4D42) ? "image/bmp"
+        : (n & 0xFFFF0000 = 0xD8FF) ? "image/jpeg"
+        : (n & 0xFFFF = 0x4949) ? "image/tiff"
+        : (n & 0xFFFF = 0x4D4D) ? "image/tiff"
+        : (n & 0xFFFFFFFF = 0x504B0304) ? "application/zip"
+        : (n & 0xFFFF0000 = 0xFFFB) ? "audio/mp3"
+        : (n & 0xFFFFFFFF = 0x25504446) ? "application/pdf"
+        : (n & 0xFFFFFFFF = 0x89504E47) ? "image/x-icon"
+        : (n & 0xFFFFFFFF = 0x52494646) ? "audio/wav"
+        : (n & 0xFFFFFFFF = 0x7F454C46) ? "application/x-elf"
+        : (n & 0xFFFFFFFF = 0x464C5601) ? "video/x-flv"
+        : (n & 0xFFFFFFFF = 0x000001BA) ? "video/mpeg"
+        : (n & 0xFFFFFFFF = 0x000001B3) ? "video/mpeg"
+        : "application/octet-stream"
     }
     /************************************************************************
      * @description The websocket client implemented through winhttp,
