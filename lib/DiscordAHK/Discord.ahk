@@ -172,6 +172,10 @@ Class Discord {
             for i,j in data.embeds
                 if j is EmbedBuilder
                     data.embeds[i] := j.embedObj
+        if data.hasProp("components")
+            for i,j in data.components
+                if j is ActionRowBuilder
+                    data.components[i] := j.actionRow
         if !data.HasProp("files")
             return this.Request("POST", "/channels/" channel "/messages", Discord.JSON.stringify(data), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
         params := [""]

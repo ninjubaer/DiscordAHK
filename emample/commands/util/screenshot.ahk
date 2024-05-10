@@ -9,25 +9,15 @@
 command.addCommand()
 
 sendScreenshot(interaction) {
-    pBitmap := Gdip_BitmapFromScreen()
-    attachment := AttachmentBuilder(pBitmap)
-    embed := EmbedBuilder()
-    .setTitle("Screenshot")
-    .setImage(attachment)
-    A_Clipboard := Discord.JSON.stringify(interaction, true)
     interaction.reply({
         type: 4,
         data: {
-            embeds: [embed],
+            embeds: [embed := EmbedBuilder()
+                .setTitle("Screenshot")
+                .setImage(attachment:=AttachmentBuilder(pBitmap := Gdip_BitmapFromScreen()))],
             files: [attachment],
             flags: !interaction.data.data.hasProp("options") || !interaction.data.data.options.has(1) ? 0 : interaction.data.data.options[1].value ? 64 : 0
         }
-    })
-    interaction.editReply({
-        embeds: [f:=EmbedBuilder()
-            .setTitle("Screenshot")
-            .setDescription("Screenshot has been sent!")]
-        , flags: 64
     })
     Gdip_DisposeImage(pBitmap)
 }
