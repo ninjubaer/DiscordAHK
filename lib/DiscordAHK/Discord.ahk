@@ -182,6 +182,7 @@ Class Discord {
             }
         params[1] := Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(data))
         Discord.CreateFormData(&payload, &contentType, params)
+        return this.Request("POST", "/channels/" channel "/messages", payload, Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", contentType))
     }
     react(channel, message, emoji) {
         return this.Request("PUT", "/channels/" channel "/messages/" message "/reactions/" emoji "/@me", "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
@@ -190,7 +191,22 @@ Class Discord {
         return this.Request("DELETE", "/channels/" channel "/messages/" message, "", Map("User-Agent", "DiscordAHK by ninju and ferox"))
     }
     editMessage(channel, message, content) {
-        return this.Request("PATCH", "/channels/" channel "/messages/" message, Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+        if content.hasProp("embeds")
+            for i,j in content.embeds
+                if j is EmbedBuilder
+                    content.embeds[i] := j.embedObj
+        if !content.HasProp("files")
+            return this.Request("PATCH", "/channels/" channel "/messages/" message, Discord.JSON.stringify(content), Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", "application/json"))
+        params := [""]
+        for i, j in content.files {
+            if j is AttachmentBuilder {
+                content.files[i] := {url: j.attachmentName}
+                params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",j.contentType,(j.isBitmap ? "pBitmap" : "file"),j.file))
+            }
+        }
+        params[1] := Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(content))
+        Discord.CreateFormData(&payload, &contentType, params)
+        return this.Request("PATCH", "/channels/" channel "/messages/" message, payload, Map("User-Agent", "DiscordAHK by ninju and ferox", "Content-Type", contentType))
     }
     class Interaction {
         __New(self, data) {
@@ -234,12 +250,35 @@ Class Discord {
             return false
         }
         editReply(content) {
+            if content.hasProp("embeds")
+                for i,j in content.embeds
+                    if j is EmbedBuilder
+                        content.embeds[i] := j.embedObj
+            if !content.HasProp("files")
+				return this.edr(Discord.JSON.stringify(content))
+			params := [""]
+			for i, j in content.files {
+				if j is AttachmentBuilder {
+					content.files[i] := {url: j.attachmentName}
+					params.push(Map("name","files[" i-1 "]","filename", j.fileName ,"content-type",j.contentType,(j.isBitmap ? "pBitmap" : "file"),j.file))
+				}
+				else
+					if j is String {
+						content.files[i] := {url: j}
+						params.push(Map("name","files[" i-1 "]","filename",SubStr(j,InStr(j,"\",,-1),+1),"content-type",Discord.MimeType(j),"file",j))
+                    }
+			}
+			params[1] := Map("name","payload_json", "content-type","application/json", "content",Discord.JSON.stringify(content))
+			Discord.CreateFormData(&payload, &contentType, params)
+			return this.edr(payload)
+            }
+        edr(content) {
             whr := ComObject("WinHttp.WinHttpRequest.5.1")
             whr.Open("PATCH", Discord.baseApi "/webhooks/" this.bot.user.id "/" this.token "/messages/@original", true)
             whr.SetRequestHeader("Authorization", "Bot " this.bot.token)
             whr.SetRequestHeader("User-Agent", "DiscordAHK by ninju and ferox")
             whr.SetRequestHeader("Content-Type", "application/json")
-            whr.Send(Discord.JSON.stringify(content))
+    	    whr.Send(content)
             whr.WaitForResponse()
             return whr.ResponseText
         }

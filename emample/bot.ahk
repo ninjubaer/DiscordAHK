@@ -27,6 +27,7 @@ includeCommands() {
 includeCommands()
 Client := Discord(IniRead(".\..\settings\config.ini", "Discord", "BotToken"), [Discord.intents.GUILDS, Discord.intents.GUILD_MESSAGES, Discord.intents.GUILD_MESSAGE_REACTIONS, Discord.intents.GUILD_MESSAGE_TYPING, Discord.intents.MESSAGE_CONTENT])
 Client.Once("READY", (*) => msgbox("The bot is online`nserving as: " . Client.User.Username))
+attachment := AttachmentBuilder("bot.ahk")
 #Include %A_ScriptDir%\Handlers\commandHandler.ahk
 #include *i %A_ScriptDir%\commands\__includeCommands.ahk
 Client.On("INTERACTION_CREATE", interactionHandler)

@@ -23,5 +23,11 @@ sendScreenshot(interaction) {
             flags: !interaction.data.data.hasProp("options") || !interaction.data.data.options.has(1) ? 0 : interaction.data.data.options[1].value ? 64 : 0
         }
     })
+    interaction.editReply({
+        embeds: [f:=EmbedBuilder()
+            .setTitle("Screenshot")
+            .setDescription("Screenshot has been sent!")]
+        , flags: 64
+    })
     Gdip_DisposeImage(pBitmap)
 }
